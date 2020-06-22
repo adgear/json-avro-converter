@@ -19,7 +19,7 @@ sourceCompatibility = 1.8
 
 allprojects {
     project.group = 'tech.allegro.schema.json2avro'
-    project.version = scmVersion.version
+    project.version = '0.2.10-SNAPSHOT'
 }
 
 subprojects {
