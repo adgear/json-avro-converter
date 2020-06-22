@@ -12,6 +12,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
 import java.util.ArrayDeque;
+import static java.util.Collections.emptyMap;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
@@ -28,7 +29,7 @@ public class JsonGenericRecordReader {
     private static final Object INCOMPATIBLE = new Object();
     private final ObjectMapper mapper;
     private final UnknownFieldListener unknownFieldListener;
-
+    private final Map<String, Function<String, ? extends Object>> customStringFieldMappingFunctions;
 
     public JsonGenericRecordReader() {
         this(new ObjectMapper());
@@ -39,8 +40,13 @@ public class JsonGenericRecordReader {
     }
 
     public JsonGenericRecordReader(ObjectMapper mapper, UnknownFieldListener unknownFieldListener) {
+        this(mapper, unknownFieldListener, emptyMap());
+    }
+
+    public JsonGenericRecordReader(ObjectMapper mapper, UnknownFieldListener unknownFieldListener, Map<String, Function<String, ? extends Object>> customStringFieldMappingFunctions) {
         this.mapper = mapper;
         this.unknownFieldListener = unknownFieldListener;
+        this.customStringFieldMappingFunctions = customStringFieldMappingFunctions;
     }
 
     @SuppressWarnings("unchecked")
@@ -82,48 +88,52 @@ public class JsonGenericRecordReader {
         }
         Object result;
 
-        switch (schema.getType()) {
-            case RECORD:
-                result = onValidType(value, Map.class, path, silently, map -> readRecord(map, schema, path));
-                break;
-            case ARRAY:
-                result = onValidType(value, List.class, path, silently, list -> readArray(field, schema, list, path));
-                break;
-            case MAP:
-                result = onValidType(value, Map.class, path, silently, map -> readMap(field, schema, map, path));
-                break;
-            case UNION:
-                result = readUnion(field, schema, value, path);
-                break;
-            case INT:
-                result = onValidNumber(value, path, silently, Number::intValue);
-                break;
-            case LONG:
-                result = onValidNumber(value, path, silently, Number::longValue);
-                break;
-            case FLOAT:
-                result = onValidNumber(value, path, silently, Number::floatValue);
-                break;
-            case DOUBLE:
-                result = onValidNumber(value, path, silently, Number::doubleValue);
-                break;
-            case BOOLEAN:
-                result = onValidType(value, Boolean.class, path, silently, bool -> bool);
-                break;
-            case ENUM:
-                result = onValidType(value, String.class, path, silently, string -> ensureEnum(schema, string, path));
-                break;
-            case STRING:
-                result = onValidType(value, String.class, path, silently, string -> string);
-                break;
-            case BYTES:
-                result = onValidType(value, String.class, path, silently, string -> bytesForString(string));
-                break;
-            case NULL:
-                result = value == null ? value : INCOMPATIBLE;
-                break;
-            default:
-                throw new AvroTypeException("Unsupported type: " + field.schema().getType());
+        if (value instanceof String && customStringFieldMappingFunctions.containsKey(field.name())) {
+            result = customStringFieldMappingFunctions.get(field.name()).apply((String)value);
+        } else {
+            switch (schema.getType()) {
+                case RECORD:
+                    result = onValidType(value, Map.class, path, silently, map -> readRecord(map, schema, path));
+                    break;
+                case ARRAY:
+                    result = onValidType(value, List.class, path, silently, list -> readArray(field, schema, list, path));
+                    break;
+                case MAP:
+                    result = onValidType(value, Map.class, path, silently, map -> readMap(field, schema, map, path));
+                    break;
+                case UNION:
+                    result = readUnion(field, schema, value, path);
+                    break;
+                case INT:
+                    result = onValidNumber(value, path, silently, Number::intValue);
+                    break;
+                case LONG:
+                    result = onValidNumber(value, path, silently, Number::longValue);
+                    break;
+                case FLOAT:
+                    result = onValidNumber(value, path, silently, Number::floatValue);
+                    break;
+                case DOUBLE:
+                    result = onValidNumber(value, path, silently, Number::doubleValue);
+                    break;
+                case BOOLEAN:
+                    result = onValidType(value, Boolean.class, path, silently, bool -> bool);
+                    break;
+                case ENUM:
+                    result = onValidType(value, String.class, path, silently, string -> ensureEnum(schema, string, path));
+                    break;
+                case STRING:
+                    result = onValidType(value, String.class, path, silently, string -> string);
+                    break;
+                case BYTES:
+                    result = onValidType(value, String.class, path, silently, string -> bytesForString(string));
+                    break;
+                case NULL:
+                    result = value == null ? value : INCOMPATIBLE;
+                    break;
+                default:
+                    throw new AvroTypeException("Unsupported type: " + field.schema().getType());
+            }
         }
 
         if (pushed) {
