@@ -30,7 +30,7 @@ public class JsonGenericRecordReader implements Serializable {
     private static final Object INCOMPATIBLE = new Object();
     private final ObjectMapper mapper;
     private final UnknownFieldListener unknownFieldListener;
-    private final Map<String, Function<String, ? extends Object>> customStringFieldMappingFunctions;
+    private final Map<String, Function<?, ?>> customFieldMappingFunctions;
 
     public JsonGenericRecordReader() {
         this(new ObjectMapper());
@@ -44,10 +44,10 @@ public class JsonGenericRecordReader implements Serializable {
         this(mapper, unknownFieldListener, emptyMap());
     }
 
-    public JsonGenericRecordReader(ObjectMapper mapper, UnknownFieldListener unknownFieldListener, Map<String, Function<String, ? extends Object>> customStringFieldMappingFunctions) {
+    public JsonGenericRecordReader(ObjectMapper mapper, UnknownFieldListener unknownFieldListener, Map<String, Function<?, ?>> customFieldMappingFunctions) {
         this.mapper = mapper;
         this.unknownFieldListener = unknownFieldListener;
-        this.customStringFieldMappingFunctions = customStringFieldMappingFunctions;
+        this.customFieldMappingFunctions = customFieldMappingFunctions;
     }
 
     @SuppressWarnings("unchecked")
@@ -106,8 +106,14 @@ public class JsonGenericRecordReader implements Serializable {
         }
         Object result;
 
-        if (value instanceof String && customStringFieldMappingFunctions.containsKey(field.name())) {
-            result = customStringFieldMappingFunctions.get(field.name()).apply((String)value);
+        if (customFieldMappingFunctions.containsKey(field.name())) {
+            try {
+                result = ((Function<Object, Object>) customFieldMappingFunctions.get(field.name())).apply(value);
+            }
+            catch (RuntimeException e) {
+                System.err.println("Unable to convert '" + field.name() + "'");
+                throw e;
+            }
         } else {
             switch (schema.getType()) {
                 case RECORD:

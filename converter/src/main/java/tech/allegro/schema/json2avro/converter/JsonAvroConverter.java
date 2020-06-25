@@ -39,8 +39,8 @@ public class JsonAvroConverter implements Serializable {
         this.recordReader = new JsonGenericRecordReader(objectMapper, unknownFieldListener);
     }
 
-    public JsonAvroConverter(ObjectMapper objectMapper, UnknownFieldListener unknownFieldListener, Map<String, Function<String, ? extends Object>> customStringFieldMappingFunctions) {
-        this.recordReader = new JsonGenericRecordReader(objectMapper, unknownFieldListener, customStringFieldMappingFunctions);
+    public JsonAvroConverter(ObjectMapper objectMapper, UnknownFieldListener unknownFieldListener, Map<String, Function<?, ?>> customFieldMappingFunctions) {
+        this.recordReader = new JsonGenericRecordReader(objectMapper, unknownFieldListener, customFieldMappingFunctions);
     }
 
     public byte[] convertToAvro(byte[] data, String schema) {
