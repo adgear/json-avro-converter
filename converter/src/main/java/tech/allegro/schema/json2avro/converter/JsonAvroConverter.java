@@ -22,8 +22,9 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.Map;
 import java.util.function.Function;
+import java.io.Serializable;
 
-public class JsonAvroConverter {
+public class JsonAvroConverter implements Serializable {
     private JsonGenericRecordReader recordReader;
 
     public JsonAvroConverter() {
