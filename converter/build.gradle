@@ -24,6 +24,7 @@ plugins {
 apply plugin: 'com.commercehub.gradle.plugin.avro'
 apply plugin: 'io.codearte.nexus-staging'
 apply plugin: 'idea'
+apply plugin: 'maven'
 
 configurations {
     jmh
