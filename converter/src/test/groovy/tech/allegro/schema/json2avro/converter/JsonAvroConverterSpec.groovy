@@ -3,6 +3,7 @@ package tech.allegro.schema.json2avro.converter
 import java.nio.ByteBuffer
 import java.util.function.Function
 
+import static java.util.Collections.emptyMap
 import static java.util.Collections.singletonMap;
 import groovy.json.JsonSlurper
 import spock.lang.Specification
@@ -26,8 +27,7 @@ class JsonAvroConverterSpec extends Specification {
     def converterCustomStringFieldMapping = new JsonAvroConverter(
           new ObjectMapper(),
           null,
-          singletonMap("field_uuid_string", new UUIDConverter()
-        )
+          singletonMap("field_uuid_string", new UUIDConverter())
     )
     def slurper = new JsonSlurper()
 
@@ -962,6 +962,28 @@ class JsonAvroConverterSpec extends Specification {
         SpecificRecordConvertTest result = converter.convertToSpecificRecord(json.bytes, clazz, schema)
         then:
         result != null && result instanceof SpecificRecordConvertTest && result.getTest() == "test"
+    }
+
+    def 'should rename fields for specific record correctly'() {
+        given:
+        def json = '''
+        {
+            "testSource": "testValue",
+            "enumTest": "s1"
+        }
+        '''
+        def clazz = SpecificRecordConvertTest.class
+        def schema = SpecificRecordConvertTest.getClassSchema()
+
+        when:
+        SpecificRecordConvertTest result = new JsonAvroConverter(
+                new ObjectMapper(),
+                null,
+                emptyMap(),
+                ["testSource": "test"]
+        ).convertToSpecificRecord(json.bytes, clazz, schema)
+        then:
+        result != null && result instanceof SpecificRecordConvertTest && result.getTest() == "testValue"
     }
 
     def 'should convert specific record and back to json'() {

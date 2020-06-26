@@ -19,6 +19,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
+import static java.util.Collections.emptyMap;
 
 import static java.util.stream.Collectors.joining;
 import static java.util.stream.Collectors.toList;
@@ -31,6 +32,7 @@ public class JsonGenericRecordReader implements Serializable {
     private final ObjectMapper mapper;
     private final UnknownFieldListener unknownFieldListener;
     private final Map<String, Function<?, ?>> customFieldMappingFunctions;
+    private final Map<String,String> fieldRenameMap;
 
     public JsonGenericRecordReader() {
         this(new ObjectMapper());
@@ -45,9 +47,14 @@ public class JsonGenericRecordReader implements Serializable {
     }
 
     public JsonGenericRecordReader(ObjectMapper mapper, UnknownFieldListener unknownFieldListener, Map<String, Function<?, ?>> customFieldMappingFunctions) {
+        this(mapper, unknownFieldListener, customFieldMappingFunctions, emptyMap());
+    }
+
+    public JsonGenericRecordReader(ObjectMapper mapper, UnknownFieldListener unknownFieldListener, Map<String, Function<?, ?>> customFieldMappingFunctions, Map<String,String> fieldRenameMap) {
         this.mapper = mapper;
         this.unknownFieldListener = unknownFieldListener;
         this.customFieldMappingFunctions = customFieldMappingFunctions;
+        this.fieldRenameMap = fieldRenameMap;
     }
 
     @SuppressWarnings("unchecked")
@@ -81,14 +88,14 @@ public class JsonGenericRecordReader implements Serializable {
     private GenericData.Record readRecord(Map<String, Object> json, Schema schema, Deque<String> path) {
         final GenericRecordBuilder record = new GenericRecordBuilder(schema);
         json.entrySet().forEach(entry -> {
-            final String entryKey = entry.getKey();
-            final Field field = schema.getField(entryKey);
+            final String fieldName = fieldRenameMap.getOrDefault(entry.getKey(), entry.getKey());
+            Field field = schema.getField(fieldName);
             if (field != null) {
                 record.set(field, read(field, field.schema(), entry.getValue(), path, false));
             } else {
                 final Map<String, Field> fieldAliasMap = getFieldAliasMap(schema);
-                if (fieldAliasMap.containsKey(entryKey)) {
-                    final Field aliasedField = fieldAliasMap.get(entryKey);
+                if (fieldAliasMap.containsKey(fieldName)) {
+                    final Field aliasedField = fieldAliasMap.get(fieldName);
                     record.set(aliasedField, read(aliasedField, aliasedField.schema(), entry.getValue(), path, false));
                 } else if (unknownFieldListener != null) {
                     unknownFieldListener.onUnknownField(entry.getKey(), entry.getValue(), PathsPrinter.print(path, entry.getKey()));
