@@ -19,7 +19,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
-import static java.util.Collections.emptyMap;
 
 import static java.util.stream.Collectors.joining;
 import static java.util.stream.Collectors.toList;
@@ -31,8 +30,7 @@ public class JsonGenericRecordReader implements Serializable {
     private static final Object INCOMPATIBLE = new Object();
     private final ObjectMapper mapper;
     private final UnknownFieldListener unknownFieldListener;
-    private final Map<String, Function<?, ?>> customFieldMappingFunctions;
-    private final Map<String,String> fieldRenameMap;
+    private final Map<String, CustomFieldMapping> customFieldMappings;
 
     public JsonGenericRecordReader() {
         this(new ObjectMapper());
@@ -46,15 +44,10 @@ public class JsonGenericRecordReader implements Serializable {
         this(mapper, unknownFieldListener, emptyMap());
     }
 
-    public JsonGenericRecordReader(ObjectMapper mapper, UnknownFieldListener unknownFieldListener, Map<String, Function<?, ?>> customFieldMappingFunctions) {
-        this(mapper, unknownFieldListener, customFieldMappingFunctions, emptyMap());
-    }
-
-    public JsonGenericRecordReader(ObjectMapper mapper, UnknownFieldListener unknownFieldListener, Map<String, Function<?, ?>> customFieldMappingFunctions, Map<String,String> fieldRenameMap) {
+    public JsonGenericRecordReader(ObjectMapper mapper, UnknownFieldListener unknownFieldListener, Map<String, CustomFieldMapping> customFieldMappings) {
         this.mapper = mapper;
         this.unknownFieldListener = unknownFieldListener;
-        this.customFieldMappingFunctions = customFieldMappingFunctions;
-        this.fieldRenameMap = fieldRenameMap;
+        this.customFieldMappings = customFieldMappings;
     }
 
     @SuppressWarnings("unchecked")
@@ -85,18 +78,29 @@ public class JsonGenericRecordReader implements Serializable {
         return fieldAliasMap;
     }
 
+    private static String getTargetFieldName(final String entryKey, final CustomFieldMapping cfm) {
+        if (cfm != null && cfm.targetName != null) {
+            return cfm.targetName;
+        }
+        else {
+            return entryKey;
+        }
+    }
+
     private GenericData.Record readRecord(Map<String, Object> json, Schema schema, Deque<String> path) {
         final GenericRecordBuilder record = new GenericRecordBuilder(schema);
         json.entrySet().forEach(entry -> {
-            final String fieldName = fieldRenameMap.getOrDefault(entry.getKey(), entry.getKey());
+            final String entryKey = entry.getKey();
+            final CustomFieldMapping cfm = customFieldMappings.get(entryKey);
+            final String fieldName = getTargetFieldName(entryKey, cfm);
             Field field = schema.getField(fieldName);
             if (field != null) {
-                record.set(field, read(field, field.schema(), entry.getValue(), path, false));
+                record.set(field, read(field, field.schema(), entry.getValue(), path, false, cfm));
             } else {
                 final Map<String, Field> fieldAliasMap = getFieldAliasMap(schema);
                 if (fieldAliasMap.containsKey(fieldName)) {
                     final Field aliasedField = fieldAliasMap.get(fieldName);
-                    record.set(aliasedField, read(aliasedField, aliasedField.schema(), entry.getValue(), path, false));
+                    record.set(aliasedField, read(aliasedField, aliasedField.schema(), entry.getValue(), path, false, null));
                 } else if (unknownFieldListener != null) {
                     unknownFieldListener.onUnknownField(entry.getKey(), entry.getValue(), PathsPrinter.print(path, entry.getKey()));
                 }
@@ -106,16 +110,16 @@ public class JsonGenericRecordReader implements Serializable {
     }
 
     @SuppressWarnings("unchecked")
-    private Object read(Schema.Field field, Schema schema, Object value, Deque<String> path, boolean silently) {
+    private Object read(Schema.Field field, Schema schema, Object value, Deque<String> path, boolean silently, final CustomFieldMapping cfm) {
         boolean pushed = !field.name().equals(path.peekLast());
         if (pushed) {
             path.addLast(field.name());
         }
         Object result;
 
-        if (customFieldMappingFunctions.containsKey(field.name())) {
+        if (cfm != null && cfm.typeMapper != null) {
             try {
-                result = ((Function<Object, Object>) customFieldMappingFunctions.get(field.name())).apply(value);
+                result = ((Function<Object, Object>) cfm.typeMapper).apply(value);
             }
             catch (RuntimeException e) {
                 System.err.println("Unable to convert '" + field.name() + "'");
@@ -174,12 +178,12 @@ public class JsonGenericRecordReader implements Serializable {
     }
 
     private List<Object> readArray(Schema.Field field, Schema schema, List<Object> items, Deque<String> path) {
-        return items.stream().map(item -> read(field, schema.getElementType(), item, path, false)).collect(toList());
+        return items.stream().map(item -> read(field, schema.getElementType(), item, path, false, null)).collect(toList());
     }
 
     private Map<String, Object> readMap(Schema.Field field, Schema schema, Map<String, Object> map, Deque<String> path) {
         Map<String, Object> result = new HashMap<>(map.size());
-        map.forEach((k, v) -> result.put(k, read(field, schema.getValueType(), v, path, false)));
+        map.forEach((k, v) -> result.put(k, read(field, schema.getValueType(), v, path, false, null)));
         return result;
     }
 
@@ -187,7 +191,7 @@ public class JsonGenericRecordReader implements Serializable {
         List<Schema> types = schema.getTypes();
         for (Schema type : types) {
             try {
-                Object nestedValue = read(field, type, value, path, true);
+                Object nestedValue = read(field, type, value, path, true, null);
                 if (nestedValue == INCOMPATIBLE) {
                     continue;
                 } else {

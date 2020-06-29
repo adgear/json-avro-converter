@@ -3,7 +3,6 @@ package tech.allegro.schema.json2avro.converter
 import java.nio.ByteBuffer
 import java.util.function.Function
 
-import static java.util.Collections.emptyMap
 import static java.util.Collections.singletonMap;
 import groovy.json.JsonSlurper
 import spock.lang.Specification
@@ -24,10 +23,10 @@ class JsonAvroConverterSpec extends Specification {
     def converter = new JsonAvroConverter(new ObjectMapper(),
         {name, value, path -> println "Unknown field $path with value $value"})
     def converterFailOnUnknown = new JsonAvroConverter(new ObjectMapper(), new FailOnUnknownField())
-    def converterCustomStringFieldMapping = new JsonAvroConverter(
+    def converterCustomFieldMapping = new JsonAvroConverter(
           new ObjectMapper(),
           null,
-          singletonMap("field_uuid_string", new UUIDConverter())
+          singletonMap("field_uuid_string", CustomFieldMapping.of(new UUIDConverter()))
     )
     def slurper = new JsonSlurper()
 
@@ -979,8 +978,7 @@ class JsonAvroConverterSpec extends Specification {
         SpecificRecordConvertTest result = new JsonAvroConverter(
                 new ObjectMapper(),
                 null,
-                emptyMap(),
-                ["testSource": "test"]
+                singletonMap("testSource", CustomFieldMapping.of("test"))
         ).convertToSpecificRecord(json.bytes, clazz, schema)
         then:
         result != null && result instanceof SpecificRecordConvertTest && result.getTest() == "testValue"
@@ -1048,7 +1046,7 @@ class JsonAvroConverterSpec extends Specification {
         """
 
         when:
-        SpecificRecordUUIDConvertTest record = converterCustomStringFieldMapping.convertToSpecificRecord(json.bytes, clazz, schema)
+        SpecificRecordUUIDConvertTest record = converterCustomFieldMapping.convertToSpecificRecord(json.bytes, clazz, schema)
 
         then:
         record != null &&
